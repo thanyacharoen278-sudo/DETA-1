@@ -47,15 +47,15 @@ local Window = Rayfield:CreateWindow({
 -------------------------------------------------
 -- SETTINGS
 -------------------------------------------------
-local FLOAT_HEIGHT = 7.5
+local FLOAT_HEIGHT = 8
 local HITBOX = 450
-local FARM_SPEED = 0.03
+local FARM_SPEED = 0.08
 local DETECT_RANGE = 25000
 local BRING_RANGE = 800
 local islandGoal = nil
 local islandArriveDist = 28
-local FLOAT_TWEEN_TIME = 0.25
-local ISLAND_TWEEN_TIME = 0.25
+local FLOAT_TWEEN_TIME = 0.10
+local ISLAND_TWEEN_TIME = 0.10
 local floatTween, islandTween, lastFloatPos = nil, nil, nil
 local lastAttack = 0
 local AC = nil
@@ -224,7 +224,7 @@ local FarmAreas = {
     { MinLevel = 1525, MaxLevel = 1574, Mob = "Pistol Billionaire", Position = CFrame.new(-449.24, 106.88, 5944.87) },
     { MinLevel = 1575, MaxLevel = 1599, Mob = "Dragon Crew Warrior", Position = CFrame.new(6738.42, 127.43, -710.21) },
     { MinLevel = 1600, MaxLevel = 1624, Mob = "Dragon Crew Archer", Position = CFrame.new(6738.42, 127.43, -710.21) },
-    { MinLevel = 1625, MaxLevel = 1699, Mob = "Hydra Enforcer", Position = CFrame.new(5228.12, 1003.19, 758.25) },
+    { MinLevel = 1625, MaxLevel = 1649, Mob = "Hydra Enforcer", Position = CFrame.new(5228.12, 1003.19, 758.25) },
     { MinLevel = 1650, MaxLevel = 1699, Mob = "Venomous Assailant", Position = CFrame.new(5228.12, 1003.19, 758.25) },
     { MinLevel = 1700, MaxLevel = 1724, Mob = "Marine Commodore", Position = CFrame.new(2484.22, 74.61, -6792.02) },
     { MinLevel = 1725, MaxLevel = 1774, Mob = "Marine Rear Admiral", Position = CFrame.new(2484.22, 74.61, -6792.02) },

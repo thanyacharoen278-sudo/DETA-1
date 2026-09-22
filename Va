@@ -1,0 +1,363 @@
+--[[
+    D Combat · PVP + Mob
+    ตีผู้เล่นได้ · Aim Lock · ส่งเฉพาะตอนถืออาวุธ
+]]
+
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local RS = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LP = Players.LocalPlayer
+local PlayerGui = LP:WaitForChild("PlayerGui")
+
+-------------------------------------------------
+-- CONFIG
+-------------------------------------------------
+local RANGE = 250
+local DELAY = 0.05
+local FAST_DELAY = 0.03
+local GATHER_RANGE = 400
+local GATHER_DIST = 10
+
+local Settings = {
+    AutoAttack = false,
+    FastAttack = false,
+    Gather = false,
+    AttackPlayers = false,
+    AimLock = false,
+    AimName = "",
+}
+
+-------------------------------------------------
+-- REMOTE
+-------------------------------------------------
+local Net = RS:WaitForChild("Modules"):WaitForChild("Net")
+local RegisterAttack = Net["RE/RegisterAttack"]
+local RegisterHit = Net["RE/RegisterHit"]
+
+-------------------------------------------------
+-- HELPERS
+-------------------------------------------------
+local function Char(p)
+    return (p or LP).Character
+end
+
+local function HRP(p)
+    local c = Char(p)
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+local function IsAlive(model)
+    local h = model and model:FindFirstChildOfClass("Humanoid")
+    return h and h.Health > 0
+end
+
+local function HoldingTool()
+    local c = Char()
+    return c and c:FindFirstChildOfClass("Tool")
+end
+
+local function GetHitPart(model)
+    return model:FindFirstChild("LeftLowerArm")
+        or model:FindFirstChild("LeftUpperArm")
+        or model:FindFirstChild("RightLowerArm")
+        or model:FindFirstChild("UpperTorso")
+        or model:FindFirstChild("HumanoidRootPart")
+end
+
+local function FindPlayer(name)
+    if not name or name == "" then return nil end
+    name = string.lower(name:gsub("^%s*(.-)%s*$", "%1"))
+    for _, p in ipairs(Players:GetPlayers()) do
+        if string.lower(p.Name) == name or string.lower(p.DisplayName) == name then
+            return p
+        end
+    end
+    for _, p in ipairs(Players:GetPlayers()) do
+        if string.find(string.lower(p.Name), name, 1, true) then
+            return p
+        end
+    end
+    return nil
+end
+
+-------------------------------------------------
+-- TARGETS
+-------------------------------------------------
+local function GetTargets()
+    local h = HRP()
+    if not h then return {} end
+    local pos = h.Position
+    local list = {}
+
+    -- มอน
+    local folder = workspace:FindFirstChild("Enemies")
+    if folder then
+        for _, mob in ipairs(folder:GetChildren()) do
+            if IsAlive(mob) then
+                local root = mob:FindFirstChild("HumanoidRootPart")
+                local part = GetHitPart(mob)
+                if root and part and (root.Position - pos).Magnitude <= RANGE then
+                    table.insert(list, { part = part, model = mob, name = mob.Name })
+                end
+            end
+        end
+    end
+
+    -- ผู้เล่น (PVP)
+    if Settings.AttackPlayers then
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr \~= LP then
+                local c = Char(plr)
+                if c and IsAlive(c) then
+                    local root = HRP(plr)
+                    local part = GetHitPart(c)
+                    if root and part and (root.Position - pos).Magnitude <= RANGE then
+                        table.insert(list, { part = part, model = c, name = plr.Name })
+                    end
+                end
+            end
+        end
+    end
+
+    return list
+end
+
+-------------------------------------------------
+-- ATTACK (เฉพาะตอนถืออาวุธ)
+-------------------------------------------------
+local function DoAttack(targets)
+    if not HoldingTool() then return end
+    if not RegisterAttack or not RegisterHit then return end
+    if #targets == 0 then return end
+
+    for _, t in ipairs(targets) do
+        if not HoldingTool() then return end
+        if t.model and t.model.Parent and IsAlive(t.model) then
+            pcall(function()
+                RegisterAttack:FireServer(-math.huge)
+                RegisterHit:FireServer(t.part, {})
+            end)
+            task.wait(Settings.FastAttack and FAST_DELAY or DELAY)
+        end
+    end
+end
+
+-------------------------------------------------
+-- GATHER
+-------------------------------------------------
+local function GatherMobs()
+    local h = HRP()
+    if not h then return end
+    local folder = workspace:FindFirstChild("Enemies")
+    if not folder then return end
+
+    local i = 0
+    for _, mob in ipairs(folder:GetChildren()) do
+        if IsAlive(mob) then
+            local root = mob:FindFirstChild("HumanoidRootPart")
+            if root and (root.Position - h.Position).Magnitude <= GATHER_RANGE then
+                i = i + 1
+                local a = (i / 12) * math.pi * 2
+                pcall(function()
+                    root.CFrame = CFrame.new(h.Position + Vector3.new(math.cos(a) * GATHER_DIST, 0, math.sin(a) * GATHER_DIST))
+                    root.AssemblyLinearVelocity = Vector3.zero
+                end)
+            end
+        end
+    end
+end
+
+-------------------------------------------------
+-- AIM LOCK
+-------------------------------------------------
+RunService.RenderStepped:Connect(function()
+    if not Settings.AimLock then return end
+    local target = FindPlayer(Settings.AimName)
+    if not target or target == LP then return end
+    local root = HRP(target)
+    local cam = workspace.CurrentCamera
+    if not root or not cam or not IsAlive(Char(target)) then return end
+    pcall(function()
+        cam.CFrame = CFrame.lookAt(cam.CFrame.Position, root.Position)
+    end)
+end)
+
+-------------------------------------------------
+-- UI
+-------------------------------------------------
+pcall(function()
+    local old = PlayerGui:FindFirstChild("DCombatUI")
+    if old then old:Destroy() end
+end)
+
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "DCombatUI"
+Gui.ResetOnSpawn = false
+Gui.Parent = PlayerGui
+
+local Logo = Instance.new("TextButton")
+Logo.Size = UDim2.fromOffset(48, 48)
+Logo.Position = UDim2.new(0, 14, 0.45, 0)
+Logo.BackgroundColor3 = Color3.fromRGB(18, 20, 28)
+Logo.Text = "D"
+Logo.TextColor3 = Color3.new(1, 1, 1)
+Logo.TextSize = 20
+Logo.Font = Enum.Font.GothamBold
+Logo.Parent = Gui
+Instance.new("UICorner", Logo).CornerRadius = UDim.new(1, 0)
+local ls = Instance.new("UIStroke")
+ls.Color = Color3.fromRGB(70, 140, 255)
+ls.Thickness = 2
+ls.Parent = Logo
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.fromOffset(230, 320)
+Main.Position = UDim2.new(0, 70, 0.45, -40)
+Main.BackgroundColor3 = Color3.fromRGB(15, 17, 23)
+Main.BorderSizePixel = 0
+Main.Visible = true
+Main.Parent = Gui
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 34)
+Title.BackgroundColor3 = Color3.fromRGB(22, 26, 36)
+Title.BorderSizePixel = 0
+Title.Text = "  D COMBAT PVP"
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.TextSize = 14
+Title.Font = Enum.Font.GothamBold
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Main
+Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 10)
+
+local function AddToggle(name, key, y)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -16, 0, 30)
+    btn.Position = UDim2.new(0, 8, 0, y)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 34, 44)
+    btn.Text = name .. "  · OFF"
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.TextSize = 12
+    btn.Font = Enum.Font.GothamMedium
+    btn.Parent = Main
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+    btn.MouseButton1Click:Connect(function()
+        Settings[key] = not Settings[key]
+        local on = Settings[key]
+        btn.Text = name .. (on and "  · ON" or "  · OFF")
+        btn.BackgroundColor3 = on and Color3.fromRGB(30, 100, 60) or Color3.fromRGB(30, 34, 44)
+    end)
+end
+
+AddToggle("Auto Attack", "AutoAttack", 42)
+AddToggle("Fast Attack", "FastAttack", 78)
+AddToggle("Gather Mob", "Gather", 114)
+AddToggle("Attack Players", "AttackPlayers", 150)
+
+-- Aim Lock
+local AimBtn = Instance.new("TextButton")
+AimBtn.Size = UDim2.new(1, -16, 0, 30)
+AimBtn.Position = UDim2.new(0, 8, 0, 186)
+AimBtn.BackgroundColor3 = Color3.fromRGB(30, 34, 44)
+AimBtn.Text = "Aim Lock  · OFF"
+AimBtn.TextColor3 = Color3.new(1, 1, 1)
+AimBtn.TextSize = 12
+AimBtn.Font = Enum.Font.GothamMedium
+AimBtn.Parent = Main
+Instance.new("UICorner", AimBtn).CornerRadius = UDim.new(0, 6)
+
+local NameBox = Instance.new("TextBox")
+NameBox.Size = UDim2.new(1, -16, 0, 28)
+NameBox.Position = UDim2.new(0, 8, 0, 222)
+NameBox.BackgroundColor3 = Color3.fromRGB(28, 32, 42)
+NameBox.PlaceholderText = "ชื่อผู้เล่นที่ต้องการล็อก"
+NameBox.Text = ""
+NameBox.TextColor3 = Color3.new(1, 1, 1)
+NameBox.PlaceholderColor3 = Color3.fromRGB(140, 150, 165)
+NameBox.TextSize = 11
+NameBox.Font = Enum.Font.Gotham
+NameBox.ClearTextOnFocus = false
+NameBox.Parent = Main
+Instance.new("UICorner", NameBox).CornerRadius = UDim.new(0, 6)
+
+local Info = Instance.new("TextLabel")
+Info.Size = UDim2.new(1, -16, 0, 40)
+Info.Position = UDim2.new(0, 8, 0, 258)
+Info.BackgroundTransparency = 1
+Info.Text = "ถืออาวุธก่อนถึงจะตี\nRange " .. RANGE
+Info.TextColor3 = Color3.fromRGB(150, 160, 180)
+Info.TextSize = 11
+Info.Font = Enum.Font.Gotham
+Info.Parent = Main
+
+AimBtn.MouseButton1Click:Connect(function()
+    Settings.AimName = NameBox.Text
+    if Settings.AimName == "" then
+        AimBtn.Text = "Aim Lock  · ใส่ชื่อก่อน"
+        return
+    end
+    local t = FindPlayer(Settings.AimName)
+    if not t then
+        AimBtn.Text = "Aim Lock  · ไม่พบ"
+        Settings.AimLock = false
+        return
+    end
+    Settings.AimLock = not Settings.AimLock
+    if Settings.AimLock then
+        AimBtn.Text = "Aim Lock  · " .. t.Name
+        AimBtn.BackgroundColor3 = Color3.fromRGB(140, 45, 45)
+    else
+        AimBtn.Text = "Aim Lock  · OFF"
+        AimBtn.BackgroundColor3 = Color3.fromRGB(30, 34, 44)
+    end
+end)
+
+Logo.MouseButton1Click:Connect(function()
+    Main.Visible = not Main.Visible
+end)
+
+local function MakeDrag(frame, handle)
+    local dragging, start, pos
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            start = input.Position
+            pos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local d = input.Position - start
+            frame.Position = UDim2.new(pos.X.Scale, pos.X.Offset + d.X, pos.Y.Scale, pos.Y.Offset + d.Y)
+        end
+    end)
+end
+MakeDrag(Main, Title)
+MakeDrag(Logo, Logo)
+
+-------------------------------------------------
+-- LOOP
+-------------------------------------------------
+task.spawn(function()
+    while true do
+        pcall(function()
+            if Settings.Gather then
+                GatherMobs()
+            end
+            if Settings.AutoAttack and HoldingTool() then
+                DoAttack(GetTargets())
+            end
+        end)
+        task.wait(0.03)
+    end
+end)
+
+print("[D Combat PVP] Ready")
